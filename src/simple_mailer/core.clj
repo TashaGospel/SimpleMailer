@@ -32,19 +32,22 @@
 (defn -main [& args]
   (let [details (get-details)
         times (atom (:times details))
+        sent (atom 0)
         threads 4
-        status (atom {:active true
-                      :done   0})]
+        done (atom 0)]
+    (.addShutdownHook (Runtime/getRuntime)
+                      (Thread. #(println "Sent:" @sent)))
     (dotimes [_ threads]
       (a/go-loop []
-        (if (and (:active @status) (pos? @times))
+        (if (pos? @times)
           (do
             (swap! times dec)
-            (send-email details)
+            (try
+              (send-email details)
+              (swap! sent inc)
+              (catch Exception e
+                (swap! done inc)
+                (println (.getMessage e))))
             (recur))
-          (swap! status #(update % :done inc)))))
-    (while (:active @status)
-      (if (>= (:done @status) threads)
-        (swap! status #(assoc % :active false))))))
-
-;(-main)
+          (swap! done inc))))
+    (while (< @done threads))))
